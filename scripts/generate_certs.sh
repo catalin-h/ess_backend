@@ -17,6 +17,7 @@ fi
 
 echo "Generate keys and certs with namespace: '${ns}'"
 mkdir -p $out_dir
+rm -Rf $out_dir/*
 
 # Use either X25519, X448, ED25519 or ED448
 ec_algo="ED448"
@@ -55,6 +56,7 @@ ls -alh $root_ca_key $root_ca_crt
 server_key=${out_dir}/${ns}-server-key.pem
 server_csr=${out_dir}/${ns}-server-csr.pem
 server_crt=${out_dir}/${ns}-server-crt.pem
+server_bundle_crt=${out_dir}/${ns}-server-bundle.pem
 
 openssl genpkey -algorithm ${ec_algo} -out $server_key
 openssl req -new -key $server_key -sha512 -out $server_csr -config openssl.cnf \
@@ -68,9 +70,14 @@ openssl x509 -req -days 365 -sha512 -in $server_csr -CA $root_ca_crt -CAkey $roo
 	  -CAcreateserial -out $server_crt -extfile openssl.cnf -extensions my_server_extensions
 
 #openssl x509 -text -noout -in $server_crt
+echo " Verify server certificate .."
+openssl verify -purpose sslserver -CAfile $root_ca_crt $server_crt
+
+echo "Generate server cert bundle: root ca + server"
+cat  $server_crt $root_ca_crt > $server_bundle_crt
 
 echo "Generated files:"
-ls -alh $server_key $server_csr $server_crt
+ls -alh $server_key $server_csr $server_crt $server_bundle_crt
 
 client_key=${out_dir}/${ns}-client-key.pem
 client_csr=${out_dir}/${ns}-client-csr.pem
@@ -89,16 +96,52 @@ openssl x509 -req -days 365 -sha512 -in $client_csr -CA $root_ca_crt -CAkey $roo
 	  -CAcreateserial -out $client_crt -extfile openssl.cnf -extensions my_client_extensions
 
 #openssl x509 -text -noout -in $client_crt
+echo " Verify client certificate .."
+openssl verify -purpose sslclient -CAfile $root_ca_crt $client_crt
 
 echo "Generated files:"
 ls -alh $client_key $client_csr $client_crt
 
 # Avoid accidental damage and protect the keys and certificates
 chmod -v 0400 $root_ca_key $server_key $client_key
-chmod -v 0444 $root_ca_crt $server_crt $client_crt
+chmod -v 0444 $root_ca_crt $server_crt $server_bundle_crt $client_crt
 
 echo "Cleanup .."
 
 # Remove the certificate signing requests
 rm -v $server_csr $client_csr
+
+# Generate a test nginx config file based on server bundle and key
+# and a script that launcher nginx in Docker container
+# and tests the TLS termination with the generated certificates.
+
+nginx_conf=$out_dir/tls_tester.conf
+test_nginx=$out_dir/test_nginx_docker.sh
+
+echo "Generate Nginx Docker tester script: ${test_nginx} .."
+
+cp -f ./nginx_tls_tester.conf.template $nginx_conf
+sed -i "s/certificate_bundle/$(basename $server_bundle_crt)/" $nginx_conf
+sed -i "s/server_private_key/$(basename $server_key)/" $nginx_conf
+
+cp -f ./test_tls_on_nginx_docker.sh.template $test_nginx
+sed -i "s/name_space/$ns/" $test_nginx 
+sed -i "s/certificate_bundle/$(basename $server_bundle_crt)/" $test_nginx 
+sed -i "s/server_private_key/$(basename $server_key)/" $test_nginx
+sed -i "s/root_ca_file/$(basename $root_ca_crt)/" $test_nginx
+
+
+test_local=$out_dir/test_local_tls.sh
+echo "Generate local server tester script ${test_local} .."
+
+echo "#/bin/sh" > $test_local
+echo "echo 'Testing the TLS connection with certs ..'" >> $test_local
+echo "openssl s_server -accept 8443 -CAfile $(basename $root_ca_crt) \\
+-cert $(basename $server_crt) -key $(basename $server_key) -quiet -naccept 1 &" >> $test_local
+echo "sleep 5s" >> $test_local
+echo "openssl s_client -connect 127.0.0.1:8443 -CAfile $(basename $root_ca_crt) \\
+-cert $(basename $client_crt) -key $(basename $client_key) -quiet" >> $test_local
+echo "echo 'Done'" >> $test_local
+chmod u+x $test_local
+cd $out_dir && ./test_local_tls.sh && cd -
 

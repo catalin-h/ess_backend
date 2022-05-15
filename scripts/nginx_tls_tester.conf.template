@@ -1,0 +1,12 @@
+server {
+	server_name tls_tester;
+	listen 443 ssl;
+
+	ssl_certificate /etc/nginx/conf.d/certificate_bundle;
+	ssl_certificate_key /etc/nginx/conf.d/server_private_key;
+	ssl_protocols  TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+
+	return 301 http://localhost;
+}
+
+

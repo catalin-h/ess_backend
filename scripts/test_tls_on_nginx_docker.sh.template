@@ -1,0 +1,34 @@
+#/bin/sh
+
+if [[ -z $1 ]]; then
+	host="ess.net:8443"
+	echo "Use default host: ${host}"
+else
+	host=$1
+	echo "Use input host: ${host}"
+fi
+
+# to replace with actual namespace
+ns=name_space
+container=nginx-container-${ns}
+
+# docker container rm -f $container
+
+# export to host port 443 for TLS connection
+[ ! "$(docker ps -a | grep $container)" ] && docker container run --name $container -p 443:443 -d nginx:alpine
+
+docker container ps
+
+# copy files
+docker container cp tls_tester.conf $container:/etc/nginx/conf.d
+docker container cp certificate_bundle $container:/etc/nginx/conf.d
+docker container cp server_private_key $container:/etc/nginx/conf.d
+
+# reload nginx container
+docker container exec -it $container nginx -s reload
+
+# actual TLS connection verify
+openssl s_client -connect $host -CAfile root_ca_file -quiet
+
+# docker container rm -f $container
+
