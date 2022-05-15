@@ -9,23 +9,26 @@ fi
 
 if [[ -z $1 ]]; then
 	ns="default"
+	out_dir="."
 else
 	ns=$1
+	out_dir=$1
 fi
 
 echo "Generate keys and certs with namespace: '${ns}'"
+mkdir -p $out_dir
 
 # Use either X25519, X448, ED25519 or ED448
 ec_algo="ED448"
 
 echo "Generate private CA key using eliptic curve signature algo: ${ec_algo}"
 
-root_ca_key=${ns}-ca-key.pem
+root_ca_key=${out_dir}/${ns}-ca-key.pem
 
 openssl genpkey -algorithm ${ec_algo} -out $root_ca_key
 
 openssl_cfg=openssl.cnf
-root_ca_crt=${ns}-root-ca.crt
+root_ca_crt=${out_dir}/${ns}-root-ca.crt
 
 # Don't prompt any fields while generating the rootCA certificate request by providing the config file
 # Note: -x509 option outputs a self signed certificate instead of a certificate requesti
@@ -49,9 +52,9 @@ ls -alh $root_ca_key $root_ca_crt
 # as /type0=value0/type1=value1/type2=..., characters may
 # be escaped by \ (backslash), no spaces are skipped.
 
-server_key=${ns}-server-key.pem
-server_csr=${ns}-server-csr.pem
-server_crt=${ns}-server-crt.pem
+server_key=${out_dir}/${ns}-server-key.pem
+server_csr=${out_dir}/${ns}-server-csr.pem
+server_crt=${out_dir}/${ns}-server-crt.pem
 
 openssl genpkey -algorithm ${ec_algo} -out $server_key
 openssl req -new -key $server_key -sha512 -out $server_csr -config openssl.cnf \
@@ -69,9 +72,9 @@ openssl x509 -req -days 365 -sha512 -in $server_csr -CA $root_ca_crt -CAkey $roo
 echo "Generated files:"
 ls -alh $server_key $server_csr $server_crt
 
-client_key=${ns}-client-key.pem
-client_csr=${ns}-client-csr.pem
-client_crt=${ns}-client-crt.pem
+client_key=${out_dir}/${ns}-client-key.pem
+client_csr=${out_dir}/${ns}-client-csr.pem
+client_crt=${out_dir}/${ns}-client-crt.pem
 
 openssl genpkey -algorithm ${ec_algo} -out $client_key
 openssl req -new -key $client_key -sha512 -out $client_csr -config openssl.cnf \
@@ -90,4 +93,12 @@ openssl x509 -req -days 365 -sha512 -in $client_csr -CA $root_ca_crt -CAkey $roo
 echo "Generated files:"
 ls -alh $client_key $client_csr $client_crt
 
+# Avoid accidental damage and protect the keys and certificates
+chmod -v 0400 $root_ca_key $server_key $client_key
+chmod -v 0444 $root_ca_crt $server_crt $client_crt
+
+echo "Cleanup .."
+
+# Remove the certificate signing requests
+rm -v $server_csr $client_csr
 
