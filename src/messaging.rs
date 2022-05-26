@@ -96,6 +96,10 @@ impl MessageChannel {
         Ok(input)
     }
 
+    pub fn is_closed(&self) -> bool {
+        self.command_sender.is_closed() || self.result_receiver.is_closed()
+    }
+
     pub fn handle_incoming_msg(&self, cmd: String) {
         let res = match cmd.trim() {
             MSG_HEALTH_CHECK => self.send(MSG_OK),

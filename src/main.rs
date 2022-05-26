@@ -28,6 +28,17 @@ async fn event_loop() -> Result<()> {
 
     loop {
         select! {
+            // Receives queries like health check
+            new_msg = &mut reply_task =>
+            if !reply.is_closed() {
+                match new_msg {
+                    Ok(msg) => {
+                        reply.handle_incoming_msg(msg);
+                        reply_task.set(reply.receive().fuse());
+                    }
+                    Err(e) => println!("[events] failed to retrieve the last command, error: {}", e),
+                }
+            },
 
             // Receives stop service signal
             cmd_task_ret = &mut cmd_task => {
