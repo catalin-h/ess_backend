@@ -4,6 +4,7 @@ pub mod clients_db;
 pub mod command;
 pub mod ess_errors;
 pub mod messaging;
+pub mod otp;
 
 use clap::{Parser, Subcommand};
 use clients_db::{db_tool, DbOpt};

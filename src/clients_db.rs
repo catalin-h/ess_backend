@@ -1,4 +1,5 @@
 use crate::ess_errors::{EssError, Result};
+use crate::otp::Otpist;
 use async_std::channel::unbounded;
 use async_std::stream::StreamExt;
 use clap::Subcommand;
@@ -65,7 +66,7 @@ pub struct User {
     pub secret: Option<String>,
 }
 
-#[derive(clap::Parser)]
+#[derive(clap::Parser, Deserialize, Serialize)]
 #[clap(group(
     clap::ArgGroup::new("update-group")
         .multiple(true)
@@ -83,12 +84,22 @@ pub struct UserUpdate {
     last_name: Option<String>,
 }
 
-pub struct UserCred {
-    /// The unique user name
-    username: String,
-    /// A secret key is a unique random string generated when
-    /// creating the employee record for the first time
-    secret: String,
+#[derive(clap::Args)]
+pub struct UserVerifyOptions {
+    /// The default expire interval in seconds, default is 60s
+    #[clap(long, short)]
+    timeslice: Option<u8>,
+    /// The code length, default 6
+    #[clap(long, short)]
+    length: Option<usize>,
+    /// On verify otp it controls how many intervals of timeslice
+    /// length to check around current timestamp. Default is 1.
+    /// E.g. if discrepancy = 2 and t is the current timestamp then
+    /// it will check every code generate by timeslices:
+    /// (t-2*expire_interval), (t-1*expire_interval), (t-0*expire_interval),
+    /// (t-1*expire_interval) and (t-2*expire_interval)
+    #[clap(long, short)]
+    discrepancy: Option<u64>,
 }
 
 #[derive(clap::Parser)]
@@ -126,9 +137,11 @@ pub enum DbCommand {
     Verify {
         /// The unique user name
         username: String,
-        /// A secret key is a unique random string generated when
-        /// creating the employee record for the first time
-        secret: String,
+        /// If present then check the against this code, otherwise generate the otp code
+        one_time_password: Option<String>,
+        /// Options
+        #[clap(flatten)]
+        flags: UserVerifyOptions,
     },
     /// Delete user
     Delete {
@@ -155,12 +168,15 @@ pub struct DbOpt {
     connection: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct DbManager {
     pool: PgPool,
     conn_details: ConnectionDetails,
+    otpist: Otpist,
 }
 
-struct ConnectionDetails {
+#[derive(Clone)]
+pub struct ConnectionDetails {
     conn_str: String,
     database: String,
     username: String,
@@ -259,7 +275,7 @@ fn compute_db_name(conn_str: &str, conn_opts: Option<&ConnectOpts>) -> String {
 }
 
 impl ConnectionDetails {
-    fn new(dbopt: Option<&DbOpt>) -> Self {
+    pub fn new(dbopt: Option<&DbOpt>) -> Self {
         match dbopt {
             Some(dbopt) => {
                 let conn_str = compute_connection_string(&dbopt.connection);
@@ -287,7 +303,7 @@ impl ConnectionDetails {
         }
     }
 
-    async fn connect(self, pool_size: u32, lazy_connect: bool) -> Result<DbManager> {
+    pub async fn connect(self, pool_size: u32, lazy_connect: bool) -> Result<DbManager> {
         let pool = self.db_pool(pool_size, lazy_connect).await?;
         Ok(DbManager::new(self, pool))
     }
@@ -343,13 +359,14 @@ fn push_bind_for_option<'qb, 'args, T: 'args, Sep>(
 }
 
 /// Returns true if the closure provider wants the next user data
-type UserDataFn = Box<dyn Fn(User) -> bool>;
+type UserDataFn = Box<dyn Fn(User) -> bool + Send>;
 
 impl DbManager {
     fn new(conn_details: ConnectionDetails, pool: PgPool) -> Self {
         DbManager {
             conn_details: conn_details,
             pool: pool,
+            otpist: Otpist::new(),
         }
     }
 
@@ -454,7 +471,7 @@ impl DbManager {
         Ok(())
     }
 
-    async fn insert_user(&self, user: User) -> Result<()> {
+    pub async fn insert_user(&self, user: User) -> Result<()> {
         println!("[db] inserting username: {} ...", user.username);
 
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(format!(
@@ -492,7 +509,7 @@ impl DbManager {
         Ok(())
     }
 
-    async fn update_user(&self, userupd: UserUpdate) -> Result<()> {
+    pub async fn update_user(&self, userupd: UserUpdate) -> Result<()> {
         println!("[db] updating username: {} ...", userupd.username);
 
         let mut qb: QueryBuilder<Postgres> =
@@ -526,7 +543,7 @@ impl DbManager {
         Ok(())
     }
 
-    async fn delete_user(&self, username: String) -> Result<()> {
+    pub async fn delete_user(&self, username: String) -> Result<()> {
         println!("[db] deleting username: {} ...", username);
 
         let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("DELETE FROM ");
@@ -543,44 +560,54 @@ impl DbManager {
         Ok(())
     }
 
-    async fn verify_user(&self, usrcrd: UserCred) -> Result<()> {
-        println!("[db] verify username: {} secret ...", usrcrd.username);
-
-        let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT username FROM ");
-
-        qb.push(ESS_CLIENT_TABLE)
-            .push(" WHERE username = ")
-            .push_bind(usrcrd.username.clone())
-            .push(" AND secret = ")
-            .push_bind(usrcrd.secret);
-
-        let rec = qb.build().fetch_optional(&self.pool).await?;
-
-        if let Some(pgrow) = rec {
-            let uname = pgrow.try_get::<String, _>(0)?;
-            println!("[db] username: {} and secret match", uname);
-            Ok(())
-        } else {
-            println!("[db] username: {} and secret don't match", usrcrd.username);
-            Err(EssError::DbFailedVerifyUser(usrcrd.username))
-        }
+    pub fn with_otpist(&mut self, otpist: Otpist) {
+        self.otpist = otpist;
     }
 
-    async fn get_user(&self, username: String) -> Result<User> {
+    pub async fn verify_user(&self, username: &str, one_time_password: Option<&str>) -> Result<()> {
+        let user = self.get_user(username).await?;
+        let secret = user.secret.ok_or(EssError::OneTimePasswordVerifyFailed)?;
+
+        match one_time_password {
+            Some(otp) => {
+                println!("[db] verifying username: {} and otp: {} ...", username, otp);
+
+                if self.otpist.verify_code(&secret, otp) {
+                    println!("[db] verify OK!");
+                } else {
+                    println!("[db] verify failed!");
+                    return Err(EssError::OneTimePasswordVerifyFailed);
+                }
+            }
+            None => {
+                let code = self.otpist.code(&secret)?;
+                println!("[db] generate for {} new otp code: {}", username, code);
+            }
+        };
+
+        Ok(())
+    }
+
+    pub async fn get_user(&self, username: &str) -> Result<User> {
         println!("Getting details for username: {} ...", username,);
 
         let useropt = sqlx::query_as::<_, User>(SELECT_USER)
-            .bind(username.clone())
+            .bind(username)
             .fetch_optional(&self.pool)
             .await?;
 
         match useropt {
             Some(user) => Ok(user),
-            None => Err(EssError::DbUserNotFound(username)),
+            None => Err(EssError::DbUserNotFound(String::from(username))),
         }
     }
 
-    async fn get_all(&self, udatafn: UserDataFn) -> Result<()> {
+    pub async fn get_user_as_json(&self, username: &str) -> Result<JsonValue> {
+        let user = self.get_user(username).await?; // DbUserNotFound returns here
+        serde_json::to_value(user).map_or_else(|_| Ok(JsonValue::default()), |j| Ok(j))
+    }
+
+    pub async fn get_all(&self, udatafn: UserDataFn) -> Result<()> {
         println!("Getting all user details ...");
         let mut stream = sqlx::query_as::<_, User>(SELECT_ALL).fetch(&self.pool);
 
@@ -592,11 +619,42 @@ impl DbManager {
 
         Ok(())
     }
+
+    pub async fn get_all_as_json(&self) -> Result<JsonValue> {
+        let (write, mut read) = unbounded::<User>();
+        self.get_all(Box::new(move |usr| {
+            async_std::task::block_on(async { write.send(usr).await }).map_or_else(
+                |e| {
+                    println!("[db] failed send user data: {}", e);
+                    false
+                },
+                |_| true,
+            )
+        }))
+        .await?;
+
+        let mut jvec = Vec::<JsonValue>::new();
+        while let Some(usr) = read.next().await {
+            match serde_json::to_value(&usr) {
+                Ok(jusr) => {
+                    jvec.push(jusr);
+                }
+                Err(e) => {
+                    jvec.push(JsonValue::default());
+                    println!(
+                        "[db] failed parse user data for: {}, error: {}",
+                        usr.username, e
+                    )
+                }
+            };
+        }
+        Ok(JsonValue::Array(jvec))
+    }
 }
 
 pub async fn db_tool(dbopt: DbOpt) -> Result<()> {
     let conn_details = ConnectionDetails::new(Some(&dbopt));
-    let db = match &dbopt.action {
+    let mut db = match &dbopt.action {
         DbCommand::Connect(_) => conn_details.connect(1, false).await?,
         _ => conn_details.connect(ESS_DB_DEFAULT_POOL_SIZE, true).await?,
     };
@@ -607,51 +665,36 @@ pub async fn db_tool(dbopt: DbOpt) -> Result<()> {
         DbCommand::Insert(user) => db.insert_user(user).await,
         DbCommand::Update(userupd) => db.update_user(userupd).await,
         DbCommand::Delete { username } => db.delete_user(username).await,
-        DbCommand::Verify { username, secret } => {
-            db.verify_user(UserCred {
-                username: username,
-                secret: secret,
-            })
-            .await
+        DbCommand::Verify {
+            username,
+            one_time_password,
+            flags,
+        } => {
+            if flags.length.is_some() || flags.timeslice.is_some() || flags.discrepancy.is_some() {
+                db.with_otpist(Otpist::new_with(
+                    flags.length.unwrap_or(crate::otp::OTP_DEFAULT_CODE_LEN),
+                    flags
+                        .timeslice
+                        .unwrap_or(crate::otp::OTP_DEFAULT_EXPIRE_CODE_SEC),
+                    flags
+                        .discrepancy
+                        .unwrap_or(crate::otp::OTP_DEFAULT_DISCREPANCY),
+                ));
+            }
+
+            db.verify_user(&username, one_time_password.as_ref().map(|s| s.as_str()))
+                .await
         }
         DbCommand::GetUser { username } => {
             async {
-                let res = db.get_user(username).await?;
-                // convert User struct to json
-                println!("User: \n{}", serde_json::to_string_pretty(&res)?);
+                println!("User: \n{}", db.get_user_as_json(&username).await?);
                 Ok(())
             }
             .await
         }
         DbCommand::GetAll => {
             async {
-                let (write, mut read) = unbounded::<User>();
-                db.get_all(Box::new(move |usr| {
-                    async_std::task::block_on(async { write.send(usr).await }).map_or_else(
-                        |e| {
-                            println!("[db] failed send user data: {}", e);
-                            false
-                        },
-                        |_| true,
-                    )
-                }))
-                .await?;
-
-                let mut jvec = Vec::<JsonValue>::new();
-                while let Some(usr) = read.next().await {
-                    match serde_json::to_value(&usr) {
-                        Ok(jusr) => {
-                            jvec.push(jusr);
-                        }
-                        Err(e) => {
-                            println!(
-                                "[db] failed parse user data for: {}, error: {}",
-                                usr.username, e
-                            )
-                        }
-                    };
-                }
-                let jarray = JsonValue::Array(jvec);
+                let jarray = db.get_all_as_json().await?;
                 println!("All users: \n{}", serde_json::to_string_pretty(&jarray)?);
                 Ok(())
             }

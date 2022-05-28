@@ -16,9 +16,18 @@ version = "0.5"
 features = ["postgres", "runtime-async-std-rustls"]
 
 [dependencies]
-quick-error = "2.0.1"
+quick-error = "2"
 clap = { version = "3", features = ["derive"] }
 url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 const_format = "0.2.23"
+async-tls = "^0.9"
+rustls = "^0.18"
+async-h1 = "^2"
+async-dup = "^1.2"
+tide = "^0.16.0"
+tide-rustls = "^0.3.0"
+google-authenticator = "^0.3.0"
+base32 = "0.4.0"
+rand = "^0.8"

@@ -51,9 +51,6 @@ quick_error! {
         DbInsert(err: String) {
             display("Database insert error: {}", err)
         }
-        DbFailedVerifyUser(username: String) {
-            display("Failed verify the username: {} and secret", username)
-        }
         DbUserNotFound(username: String) {
             display("Username: {} not found", username)
         }
@@ -62,6 +59,16 @@ quick_error! {
             from()
         }
         Serde(err: serde_json::Error) {
+            from()
+        }
+        InvalidResource(resource: &'static str) {
+            display("Invalid resource: '{}'", resource)
+        }
+        OneTimePasswordVerifyFailed {
+            display("The one time password/code is not correct")
+        }
+        GenericGAError(err: google_authenticator::GAError) {
+            display("Google auth error: {}", err)
             from()
         }
     }
