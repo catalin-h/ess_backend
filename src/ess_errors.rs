@@ -48,8 +48,8 @@ quick_error! {
             display("SQlx error: {}", sqlx_error_message(err))
             from()
         }
-        DbInsert(err: String) {
-            display("Database insert error: {}", err)
+        UsernameAlreadyExists(user: String) {
+            display("The username '{}' already exists", user)
         }
         DbUserNotFound(username: String) {
             display("Username: {} not found", username)
@@ -70,6 +70,15 @@ quick_error! {
         GenericGAError(err: google_authenticator::GAError) {
             display("Google auth error: {}", err)
             from()
+        }
+        NoUsernameSpecified {
+            display("No username specified")
+        }
+        InvalidInputParameters {
+            display("Invalid parameters")
+        }
+        NotImplemented {
+            display("Function not implemented yet")
         }
     }
 }

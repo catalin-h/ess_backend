@@ -53,13 +53,15 @@ pub struct User {
     #[clap(long, short)]
     pub username: String,
     /// The user's first name
-    #[clap(long, short)]
+    #[clap(long, short, default_value_t = String::from("noname"))]
     #[sqlx(rename = "firstname")]
-    pub first_name: Option<String>,
+    #[serde(rename = "firstName")]
+    pub first_name: String,
     /// The user's last name
-    #[clap(long, short)]
+    #[clap(long, short, default_value_t = String::from("noname"))]
     #[sqlx(rename = "lastname")]
-    pub last_name: Option<String>,
+    #[serde(rename = "lastName")]
+    pub last_name: String,
     /// A secret key is a unique random string generated when
     /// creating the employee record for the first time
     #[clap(long, short)]
@@ -73,14 +75,13 @@ pub struct User {
         .args(&["first-name", "last-name"]),
 ))]
 pub struct UserUpdate {
-    /// The unique user name
-    #[clap(long, short)]
-    username: String,
     /// The user's first name
     #[clap(long, short)]
+    #[serde(rename = "firstName")]
     first_name: Option<String>,
     /// The user's last name
     #[clap(long, short)]
+    #[serde(rename = "lastName")]
     last_name: Option<String>,
 }
 
@@ -132,7 +133,13 @@ pub enum DbCommand {
     /// Insert user
     Insert(User),
     /// Update user info & secret except the username
-    Update(UserUpdate),
+    Update {
+        /// The unique user name
+        username: String,
+        /// The user data to update
+        #[clap(flatten)]
+        user_data: UserUpdate,
+    },
     /// Verify secret for username
     Verify {
         /// The unique user name
@@ -345,11 +352,11 @@ where
 }
 
 fn push_bind_for_option<'qb, 'args, T: 'args, Sep>(
-    opt: Option<T>,
+    opt: Option<&'args T>,
     builder: &mut Separated<'qb, 'args, Postgres, Sep>,
 ) where
     Sep: Display,
-    T: Send + Type<Postgres> + Encode<'args, Postgres>,
+    T: Send + Type<Postgres> + Encode<'args, Postgres> + Sync,
     'args: 'qb,
 {
     match opt {
@@ -471,7 +478,7 @@ impl DbManager {
         Ok(())
     }
 
-    pub async fn insert_user(&self, user: User) -> Result<()> {
+    pub async fn insert_user(&self, user: User) -> Result<String> {
         println!("[db] inserting username: {} ...", user.username);
 
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(format!(
@@ -479,13 +486,13 @@ impl DbManager {
             ESS_CLIENT_TABLE
         ));
 
-        query_builder.push_values(vec![user], |mut b, user| {
-            b.push_bind(user.username);
-            push_bind_for_option(user.first_name, &mut b);
-            push_bind_for_option(user.last_name, &mut b);
-            push_bind_for_option(user.secret, &mut b);
+        query_builder.push_values(vec![&user], |mut b, ref user| {
+            b.push_bind(&user.username);
+            b.push_bind(&user.first_name);
+            b.push_bind(&user.last_name);
+            push_bind_for_option(user.secret.as_ref(), &mut b);
         });
-        query_builder.push(" RETURNING username;");
+        query_builder.push(" RETURNING secret;");
 
         let rec = query_builder
             .build()
@@ -497,20 +504,24 @@ impl DbManager {
                     if pgerr.constraint() == Some(ESS_CLIENT_TABLE_SECRET_CNSTRT)
                         || pgerr.constraint() == Some(ESS_CLIENT_TABLE_USER_CNSTRT)
                     {
-                        return EssError::DbInsert(String::from(pgerr.message()));
+                        return EssError::UsernameAlreadyExists(user.username.clone());
                     }
                 }
                 EssError::Sqlx(sqlxerr)
             })?;
 
-        let uname = rec.try_get::<String, _>(0)?;
+        let secret = rec.try_get::<String, _>(0)?;
 
-        println!("[db] username: {} added ", uname);
-        Ok(())
+        println!("[db] username: {} added ", user.username);
+        Ok(secret)
     }
 
-    pub async fn update_user(&self, userupd: UserUpdate) -> Result<()> {
-        println!("[db] updating username: {} ...", userupd.username);
+    pub async fn update_user(&self, username: &str, userupd: UserUpdate) -> Result<()> {
+        println!("[db] updating username: {} ...", username);
+
+        if userupd.first_name.is_none() && userupd.last_name.is_none() {
+            return Err(EssError::InvalidInputParameters);
+        }
 
         let mut qb: QueryBuilder<Postgres> =
             QueryBuilder::new(format!("UPDATE {} SET ", ESS_CLIENT_TABLE));
@@ -518,7 +529,7 @@ impl DbManager {
         if let Some(name) = userupd.first_name {
             println!(
                 "[db] updating for username: {} first name: {} ...",
-                userupd.username, name
+                username, name
             );
             qb.push("firstname = ").push_bind(name);
         }
@@ -526,13 +537,13 @@ impl DbManager {
         if let Some(name) = userupd.last_name {
             println!(
                 "[db] updating for username: {} last name: {} ...",
-                userupd.username, name
+                username, name
             );
             qb.push("lastname = ").push_bind(name);
         }
 
         qb.push(" WHERE username = ")
-            .push_bind(userupd.username)
+            .push_bind(username)
             .push(" RETURNING username;");
 
         let rec = qb.build().fetch_one(&self.pool).await?;
@@ -543,7 +554,7 @@ impl DbManager {
         Ok(())
     }
 
-    pub async fn delete_user(&self, username: String) -> Result<()> {
+    pub async fn delete_user(&self, username: &str) -> Result<()> {
         println!("[db] deleting username: {} ...", username);
 
         let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("DELETE FROM ");
@@ -662,9 +673,16 @@ pub async fn db_tool(dbopt: DbOpt) -> Result<()> {
     match dbopt.action {
         DbCommand::Init(initopts) => db.init(initopts).await,
         DbCommand::Connect(_) => Ok(()),
-        DbCommand::Insert(user) => db.insert_user(user).await,
-        DbCommand::Update(userupd) => db.update_user(userupd).await,
-        DbCommand::Delete { username } => db.delete_user(username).await,
+        DbCommand::Insert(user) => {
+            let secret = db.insert_user(user).await?;
+            println!("[db] user inserted with secret: {}", secret);
+            Ok(())
+        }
+        DbCommand::Update {
+            username,
+            user_data,
+        } => db.update_user(&username, user_data).await,
+        DbCommand::Delete { username } => db.delete_user(&username).await,
         DbCommand::Verify {
             username,
             one_time_password,
