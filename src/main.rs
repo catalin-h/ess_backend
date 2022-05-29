@@ -5,6 +5,7 @@ pub mod command;
 pub mod ess_errors;
 pub mod messaging;
 pub mod otp;
+pub mod webservice;
 
 use clap::{Parser, Subcommand};
 use clients_db::{db_tool, DbOpt};
@@ -24,8 +25,17 @@ async fn event_loop() -> Result<()> {
     // spawn command listener on another thread
     let cmd_task = async_std::task::spawn(command_task(query)).fuse();
     let reply_task = reply.receive().fuse();
+    let ws_task_admin = async_std::task::spawn(webservice::launch_ess_ws(true)).fuse();
+    let ws_task_client = async_std::task::spawn(webservice::launch_ess_ws(false)).fuse();
 
-    futures::pin_mut!(cmd_task, reply_task);
+    // TODO:
+    // - use envars: port, log level
+    // - test with curl
+    //
+    // use tide::log::Level::from_str(level: &str)
+    tide::log::with_level(tide::log::LevelFilter::Debug);
+
+    futures::pin_mut!(cmd_task, reply_task, ws_task_admin, ws_task_client);
 
     loop {
         select! {
@@ -48,17 +58,23 @@ async fn event_loop() -> Result<()> {
                     Err(err) => println!("[events] command task terminated with error: {}", err),
                 }
                 break;
-            }
+            },
 
-            // Receives queries like health check
-            new_msg = &mut reply_task => {
-                match new_msg {
-                    Ok(msg) => { reply.handle_incoming_msg(msg);
-                                 reply_task.set(reply.receive().fuse());
-                    }
-                    Err(e) => println!("[events] failed to retrieve the last command, error: {}", e),
-                }
-            }
+            ret = &mut ws_task_admin => {
+                match ret {
+                    Ok(_) => println!("[events] admin webservice exited without error"),
+                    Err(err) => println!("[events] admin webservice exited with error: {}", err),
+                };
+                break;
+            },
+
+            ret = &mut ws_task_client => {
+                match ret {
+                    Ok(_) => println!("[events] client webservice exited without error"),
+                    Err(err) => println!("[events] client webservice exited with error: {}", err),
+                };
+                break;
+            },
 
             // Dummy
             complete => println!("[events] select completed")
