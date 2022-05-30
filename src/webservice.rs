@@ -157,11 +157,23 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
         app.at("/api/admin/employee/*")
             .delete(endpoint_api_admin_employee_delete); // deletes an employee
 
-        app.listen("0.0.0.0:8081").await?;
+        app.listen(format!(
+            "0.0.0.0:{}",
+            env::var("ESS_ADMIN_WS_PORT")
+                .as_ref()
+                .map_or("8081", |port| port.as_str())
+        ))
+        .await?;
     } else {
         app.at("/api/pam/verify").post(endpoint_api_pam_verify); // checks an username + otp
 
-        app.listen("0.0.0.0:8080").await?;
+        app.listen(format!(
+            "0.0.0.0:{}",
+            env::var("ESS_CLIENT_WS_PORT")
+                .as_ref()
+                .map_or("8080", |port| port.as_str())
+        ))
+        .await?;
     }
 
     Ok(())
@@ -176,7 +188,3 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
     //     .await?;
     // }
 }
-// Add tests with respond
-// This method is useful for testing endpoints directly, or for creating servers over custom transports.
-//let req = Request::new(Method::Get, Url::parse("https://example.com")?);
-//let res: Response = app.respond(req).await?;
