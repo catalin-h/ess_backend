@@ -157,34 +157,46 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
         app.at("/api/admin/employee/*")
             .delete(endpoint_api_admin_employee_delete); // deletes an employee
 
-        app.listen(format!(
+        let host = format!(
             "0.0.0.0:{}",
             env::var("ESS_ADMIN_WS_PORT")
                 .as_ref()
                 .map_or("8081", |port| port.as_str())
-        ))
-        .await?;
+        );
+        let tls_listener = TlsListener::build().addrs(host);
+        let tls_listener = if let (Ok(cert), Ok(key)) =
+            (env::var("ESS_ADMIN_WS_CERT"), env::var("ESS_ADMIN_WS_KEY"))
+        {
+            tls_listener.cert(cert).key(key)
+        } else {
+            println!("[ws] no ESS_ADMIN_WS_CERT or/and ESS_ADMIN_WS_KEY envar key pair was set, using default");
+            tls_listener
+                .cert("./certs/admin-server-bundle.pem")
+                .key("./certs/admin-server-key.pem")
+        };
+        app.listen(tls_listener).await?;
     } else {
         app.at("/api/pam/verify").post(endpoint_api_pam_verify); // checks an username + otp
 
-        app.listen(format!(
+        let host = format!(
             "0.0.0.0:{}",
-            env::var("ESS_CLIENT_WS_PORT")
+            env::var("ESS_PAM_WS_PORT")
                 .as_ref()
                 .map_or("8080", |port| port.as_str())
-        ))
-        .await?;
+        );
+        let tls_listener = TlsListener::build().addrs(host);
+        let tls_listener = if let (Ok(cert), Ok(key)) =
+            (env::var("ESS_PAM_WS_CERT"), env::var("ESS_PAM_WS_KEY"))
+        {
+            tls_listener.cert(cert).key(key)
+        } else {
+            println!("[ws] no ESS_PAM_WS_CERT or/and ESS_PAM_WS_KEY envar key pair was set, using default");
+            tls_listener
+                .cert("./certs/pam-server-bundle.pem")
+                .key("./certs/pam-server-key.pem")
+        };
+        app.listen(tls_listener).await?;
     }
 
     Ok(())
-    // if let (Ok(cert), Ok(key)) = (env::var("TIDE_CERT"), env::var("TIDE_KEY")) {
-    //     tide::log::with_level(tide::log::LevelFilter::Info);
-    //     app.listen(
-    //         TlsListener::build()
-    //             .addrs("localhost:4433")
-    //             .cert(cert)
-    //             .key(key),
-    //     )
-    //     .await?;
-    // }
 }

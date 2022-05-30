@@ -20,7 +20,7 @@ mkdir -p $out_dir
 rm -Rf $out_dir/*
 
 # Use either X25519, X448, ED25519 or ED448
-ec_algo="ED448"
+ec_algo="ED25519"
 
 echo "Generate private CA key using eliptic curve signature algo: ${ec_algo}"
 
