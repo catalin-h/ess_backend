@@ -3,7 +3,7 @@ use crate::ess_errors::{EssError, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::str::FromStr;
-use tide::{http::mime, log::LevelFilter, prelude::json, Error, Request, Response, StatusCode};
+use tide::{http::mime, prelude::json, Error, Request, Response, StatusCode};
 use tide_rustls::TlsListener;
 
 #[derive(Clone)]

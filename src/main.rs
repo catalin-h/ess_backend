@@ -28,12 +28,13 @@ async fn event_loop() -> Result<()> {
     let ws_task_admin = async_std::task::spawn(webservice::launch_ess_ws(true)).fuse();
     let ws_task_client = async_std::task::spawn(webservice::launch_ess_ws(false)).fuse();
 
-    // TODO:
-    // - use envars: port, log level
-    // - test with curl
-    //
-    // use tide::log::Level::from_str(level: &str)
-    tide::log::with_level(tide::log::LevelFilter::Debug);
+    tide::log::with_level(
+        std::env::var("ESS_LOG_LEVEL")
+            .as_ref()
+            .map_or("info", |lvl| lvl.as_str())
+            .parse()
+            .unwrap_or(tide::log::LevelFilter::Info),
+    );
 
     futures::pin_mut!(cmd_task, reply_task, ws_task_admin, ws_task_client);
 
