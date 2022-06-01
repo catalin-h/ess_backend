@@ -1,4 +1,4 @@
-#/bin/sh
+#!/bin/bash
 
 openssl_ver=$(openssl version -v)
 if [[ $openssl_ver =~ ^(OpenSSL)[[:space:]](1\.[1-9]\.[1-9]) ]]; then
