@@ -55,7 +55,11 @@ ENV ESS_DB_CONN="postgres://ess_admin@postgres.local:5432/ess"
 HEALTHCHECK --interval=5m --timeout=30s --start-period=30s --retries=10 \
 	CMD ess_backend health || exit 1
 
+# The ess_backend handles the SIGUP, SIGINT and SIGTERM signals.
+# Docker uses SIGTERM by default. However SIGINT is more common
+# in dev usage so use this one.
+STOPSIGNAL SIGINT
+
 # Note we run the service as exxec form not shell form
 # and the format is a json array
 ENTRYPOINT ["/opt/ess_backend/ess_backend", "start" ]
-
