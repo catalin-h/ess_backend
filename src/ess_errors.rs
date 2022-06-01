@@ -80,5 +80,9 @@ quick_error! {
         NotImplemented {
             display("Function not implemented yet")
         }
+        Signals(err: ctrlc::Error) {
+            display("Signals trap error: {}", err)
+            from()
+        }
     }
 }

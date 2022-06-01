@@ -27,6 +27,8 @@ async fn event_loop() -> Result<()> {
     let reply_task = reply.receive().fuse();
     let ws_task_admin = async_std::task::spawn(webservice::launch_ess_ws(true)).fuse();
     let ws_task_client = async_std::task::spawn(webservice::launch_ess_ws(false)).fuse();
+    let (sig_send, sig_recv) = async_std::channel::unbounded();
+    let sig_recv_task = sig_recv.recv().fuse();
 
     tide::log::with_level(
         std::env::var("ESS_LOG_LEVEL")
@@ -36,10 +38,32 @@ async fn event_loop() -> Result<()> {
             .unwrap_or(tide::log::LevelFilter::Info),
     );
 
-    futures::pin_mut!(cmd_task, reply_task, ws_task_admin, ws_task_client);
+    ctrlc::set_handler(move || {
+        println!("[signals] receive stop signal, forwarding stop signal ...");
+        match async_std::task::block_on(async { sig_send.send(()).await }) {
+            Ok(_) => println!("[signals] the stop signal was forwarded"),
+            Err(e) => println!("[signals] failed to forward the stop signal, error: {}", e),
+        };
+    })?;
+
+    futures::pin_mut!(
+        cmd_task,
+        reply_task,
+        ws_task_admin,
+        ws_task_client,
+        sig_recv_task
+    );
 
     loop {
         select! {
+            ret = &mut sig_recv_task => {
+                match ret {
+                    Ok(_) => println!("[events] [signals] receive stop signal, must exit ..."),
+                    Err(err) => println!("[events] [signals] receive stop signal but with error: {}, must exit ...", err),
+                };
+                break;
+            },
+
             // Receives queries like health check
             new_msg = &mut reply_task =>
             if !reply.is_closed() {

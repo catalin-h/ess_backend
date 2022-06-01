@@ -36,3 +36,5 @@ tide-rustls = "^0.3.0"
 google-authenticator = "^0.3.0"
 base32 = "^0.4.0"
 rand = "^0.8"
+# termination means handle SIGTERM and SIGHUP also besides SIGINT
+ctrlc = { version = "^3", features = ["termination"] }
