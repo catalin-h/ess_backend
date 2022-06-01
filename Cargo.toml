@@ -3,31 +3,36 @@ name = "ess_backend"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+strip = true  # Automatically strip symbols from the binary.
+lto = true
+panic = "abort"
+codegen-units = 1
+
 [dependencies.async-std]
-version = "1.11"
+version = "^1.11"
 features = ["attributes"]
 
 [dependencies.futures]
 features = ["async-await"]
-version = "0.3.21"
+version = "^0.3"
 
 [dependencies.sqlx]
-version = "0.5"
+version = "^0.5"
 features = ["postgres", "runtime-async-std-rustls"]
 
+[dependencies.tide]
+version = "^0.16.0"
+features = ["async-h1", "femme"]
+
 [dependencies]
-quick-error = "2"
-clap = { version = "3", features = ["derive"] }
-url = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-const_format = "0.2.23"
-async-tls = "^0.9"
-rustls = "^0.20"
-async-h1 = "^2"
-async-dup = "^1.2"
-tide = "^0.16.0"
+quick-error = "^2"
+clap = { version = "^3", features = ["derive"] }
+url = "^2"
+serde = { version = "^1", features = ["derive"] }
+serde_json = "^1"
+const_format = "^0.2"
 tide-rustls = "^0.3.0"
 google-authenticator = "^0.3.0"
-base32 = "0.4.0"
+base32 = "^0.4.0"
 rand = "^0.8"
