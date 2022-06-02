@@ -1,0 +1,8 @@
+Cargo.lock
+docs
+target
+scripts/*
+!scripts/generate_certs.sh
+!scripts/*.template
+!scripts/openssl.cnf
+
