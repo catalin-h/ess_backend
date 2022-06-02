@@ -52,8 +52,8 @@ ENV ESS_LOG_LEVEL="INFO"
 ENV ESS_DB_CONN="postgres://ess_admin@postgres.local:5432/ess"
 
 # use build-in health check command
-HEALTHCHECK --interval=5m --timeout=30s --start-period=30s --retries=10 \
-	CMD ess_backend health || exit 1
+HEALTHCHECK --interval=2m --timeout=30s --start-period=30s --retries=3 \
+	CMD /opt/ess_backend/ess_backend health || exit 1
 
 # The ess_backend handles the SIGUP, SIGINT and SIGTERM signals.
 # Docker uses SIGTERM by default. However SIGINT is more common
