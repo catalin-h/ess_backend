@@ -82,6 +82,7 @@ ls -alh $server_key $server_csr $server_crt $server_bundle_crt
 client_key=${out_dir}/${ns}-client-key.pem
 client_csr=${out_dir}/${ns}-client-csr.pem
 client_crt=${out_dir}/${ns}-client-crt.pem
+client_bundle=${out_dir}/${ns}-client-bundle.pem
 
 openssl genpkey -algorithm ${ec_algo} -out $client_key
 openssl req -new -key $client_key -sha512 -out $client_csr -config openssl.cnf \
@@ -99,12 +100,15 @@ openssl x509 -req -days 365 -sha512 -in $client_csr -CA $root_ca_crt -CAkey $roo
 echo " Verify client certificate .."
 openssl verify -purpose sslclient -CAfile $root_ca_crt $client_crt
 
+echo "Generate cert bundle: root ca + client"
+cat  $client_crt $root_ca_crt > $client_bundle
+
 echo "Generated files:"
-ls -alh $client_key $client_csr $client_crt
+ls -alh $client_key $client_csr $client_crt $client_bundle
 
 # Avoid accidental damage and protect the keys and certificates
 chmod -v 0400 $root_ca_key $server_key $client_key
-chmod -v 0444 $root_ca_crt $server_crt $server_bundle_crt $client_crt
+chmod -v 0444 $root_ca_crt $server_crt $server_bundle_crt $client_crt $client_bundle
 
 echo "Cleanup .."
 
