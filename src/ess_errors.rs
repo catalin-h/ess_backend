@@ -84,5 +84,16 @@ quick_error! {
             display("Signals trap error: {}", err)
             from()
         }
+        TlsCert(item: String) {
+            display("Invalid: {}", item)
+        }
+        WebPki(err: tide_rustls::async_rustls::webpki::Error) {
+            display("Web PKI error: {}", err)
+            from()
+        }
+        RustTLS(err: tide_rustls::rustls::TLSError) {
+            display("Rust TLS error: {}", err)
+            from()
+        }
     }
 }

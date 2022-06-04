@@ -1,6 +1,6 @@
 [package]
 name = "ess_backend"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [profile.release]
@@ -36,5 +36,12 @@ tide-rustls = "^0.3.0"
 google-authenticator = "^0.3.0"
 base32 = "^0.4.0"
 rand = "^0.8"
+
 # termination means handle SIGTERM and SIGHUP also besides SIGINT
 ctrlc = { version = "^3", features = ["termination"] }
+
+# required to enable mutual auth with TLS clients
+rustls = "^0.20"
+# reads pem files for keys and x.509 certificates
+rustls-pemfile = "^1"
+webpki = "^0.22"

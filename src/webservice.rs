@@ -1,5 +1,6 @@
 use crate::clients_db::{ConnectionDetails, DbManager, User, UserUpdate};
 use crate::ess_errors::{EssError, Result};
+use crate::tlsconfig::{make_server_config, WsType};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::str::FromStr;
@@ -163,18 +164,13 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
                 .as_ref()
                 .map_or("8081", |port| port.as_str())
         );
-        let tls_listener = TlsListener::build().addrs(host);
-        let tls_listener = if let (Ok(cert), Ok(key)) =
-            (env::var("ESS_ADMIN_WS_CERT"), env::var("ESS_ADMIN_WS_KEY"))
-        {
-            tls_listener.cert(cert).key(key)
-        } else {
-            println!("[ws] no ESS_ADMIN_WS_CERT or/and ESS_ADMIN_WS_KEY envar key pair was set, using default");
-            tls_listener
-                .cert("./certs/admin-server-bundle.pem")
-                .key("./certs/admin-server-key.pem")
-        };
-        app.listen(tls_listener).await?;
+
+        let listener = TlsListener::<WsState>::build()
+            .addrs(host)
+            .config(make_server_config(WsType::Admin)?)
+            .finish()?;
+
+        app.listen(listener).await?;
     } else {
         app.at("/api/pam/verify").post(endpoint_api_pam_verify); // checks an username + otp
 
@@ -184,18 +180,13 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
                 .as_ref()
                 .map_or("8080", |port| port.as_str())
         );
-        let tls_listener = TlsListener::build().addrs(host);
-        let tls_listener = if let (Ok(cert), Ok(key)) =
-            (env::var("ESS_PAM_WS_CERT"), env::var("ESS_PAM_WS_KEY"))
-        {
-            tls_listener.cert(cert).key(key)
-        } else {
-            println!("[ws] no ESS_PAM_WS_CERT or/and ESS_PAM_WS_KEY envar key pair was set, using default");
-            tls_listener
-                .cert("./certs/pam-server-bundle.pem")
-                .key("./certs/pam-server-key.pem")
-        };
-        app.listen(tls_listener).await?;
+
+        let listener = TlsListener::<WsState>::build()
+            .addrs(host)
+            .config(make_server_config(WsType::Pam)?)
+            .finish()?;
+
+        app.listen(listener).await?;
     }
 
     Ok(())

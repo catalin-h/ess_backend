@@ -1,8 +1,10 @@
 [env]
 ESS_ADMIN_WS_CERT="./scripts/admin/admin-server-bundle.pem"
 ESS_ADMIN_WS_KEY="./scripts/admin/admin-server-key.pem"
+ESS_ADMIN_WS_ROOT_CA="./scripts/admin/admin-root-ca.crt"
 ESS_ADMIN_WS_PORT="8081"
 ESS_PAM_WS_CERT="./scripts/pam/pam-server-bundle.pem"
 ESS_PAM_WS_KEY="./scripts/pam/pam-server-key.pem"
+ESS_PAM_WS_ROOT_CA="./scripts/pam/pam-root-ca.crt"
 ESS_PAM_WS_PORT="8080"
 ESS_LOG_LEVEL="Debug"

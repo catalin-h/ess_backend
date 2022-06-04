@@ -5,6 +5,7 @@ pub mod command;
 pub mod ess_errors;
 pub mod messaging;
 pub mod otp;
+pub mod tlsconfig;
 pub mod webservice;
 
 use clap::{Parser, Subcommand};
