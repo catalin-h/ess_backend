@@ -42,9 +42,8 @@ docker cp ess_backend-ess_backend_ws-1:/opt/ess_backend/certs/pam/pam-root-ca.cr
 Note:
 * The web service client needs to be authenticated by the server so must copy 3 files: the root CA, signed client certificate and the client key. To download all from a running `ess service` container one can use the script file `download_all_client_certs_from_container.sh <container name>`
 * The server certificate is bounded to the following host names and IPs:
-```
-*.ess.local                                                                                                                                                                                              *.ess.net                                                                                                                                                                                                *.ess.local                                                                                                                                                                                              127.0.0.1           
-```
+`*.ess.local`, `*.ess.net`, `*.ess.local` or `127.0.0.1`
+
 To use another host name must update the _scripts/openssl.cnf_ and add a new entry in `[ my_subject_alt_names ]` section and regenerate the docker container image.
 
 ## Web Service Utilities
@@ -106,6 +105,8 @@ USAGE:
  -s, --secret <SECRET>            A secret key is a unique random string generated when creating the employee record for the first time
 
  -u, --username <USERNAME>        The unique user name
+ 
+ -q, --qr-code                    Return plain secret code or as QR code
  
  #### update
  Update user info
