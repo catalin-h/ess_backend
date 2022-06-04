@@ -39,9 +39,11 @@ ENV ESS_ADMIN_WS_PORT=8081
 ENV ESS_PAM_WS_PORT=8080
 EXPOSE $ESS_ADMIN_WS_PORT  $ESS_PAM_WS_PORT
 
-ENV ESS_ADMIN_WS_CERT=$ESS_WS_CERTS_PATH/admin/admin-server-bundle.pem
+ENV ESS_ADMIN_WS_ROOT_CA=$ESS_WS_CERTS_PATH/admin/admin-root-ca.crt
+ENV ESS_ADMIN_WS_CERT=$ESS_WS_CERTS_PATH/admin/admin-server-crt.pem
 ENV ESS_ADMIN_WS_KEY=$ESS_WS_CERTS_PATH/admin/admin-server-key.pem
-ENV ESS_PAM_WS_CERT=$ESS_WS_CERTS_PATH/pam/pam-server-bundle.pem
+ENV ESS_PAM_WS_ROOT_CA=$ESS_WS_CERTS_PATH/pam/pam-root-ca.crt
+ENV ESS_PAM_WS_CERT=$ESS_WS_CERTS_PATH/pam/pam-server-crt.pem
 ENV ESS_PAM_WS_KEY=$ESS_WS_CERTS_PATH/pam/pam-server-key.pem
 ENV ESS_LOG_LEVEL="INFO"
 
