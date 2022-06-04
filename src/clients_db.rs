@@ -1,5 +1,5 @@
 use crate::ess_errors::{EssError, Result};
-use crate::otp::Otpist;
+use crate::otp::{convert_to_base32, Otpist};
 use async_std::channel::unbounded;
 use async_std::stream::StreamExt;
 use clap::Subcommand;
@@ -47,6 +47,10 @@ pub struct Username {
     username: String,
 }
 
+fn default_name() -> String {
+    "noname".to_string()
+}
+
 #[derive(clap::Parser, FromRow, Deserialize, Serialize)]
 pub struct User {
     /// The unique user name
@@ -55,12 +59,12 @@ pub struct User {
     /// The user's first name
     #[clap(long, short, default_value_t = String::from("noname"))]
     #[sqlx(rename = "firstname")]
-    #[serde(rename = "firstName")]
+    #[serde(rename = "firstName", default = "default_name")]
     pub first_name: String,
     /// The user's last name
     #[clap(long, short, default_value_t = String::from("noname"))]
     #[sqlx(rename = "lastname")]
-    #[serde(rename = "lastName")]
+    #[serde(rename = "lastName", default = "default_name")]
     pub last_name: String,
     /// A secret key is a unique random string generated when
     /// creating the employee record for the first time
@@ -77,11 +81,11 @@ pub struct User {
 pub struct UserUpdate {
     /// The user's first name
     #[clap(long, short)]
-    #[serde(rename = "firstName")]
+    #[serde(rename = "firstName", default)]
     first_name: Option<String>,
     /// The user's last name
     #[clap(long, short)]
-    #[serde(rename = "lastName")]
+    #[serde(rename = "lastName", default)]
     last_name: Option<String>,
 }
 
@@ -131,7 +135,14 @@ pub enum DbCommand {
     /// Initialize the ess database and client table
     Init(InitOpts),
     /// Insert user
-    Insert(User),
+    Insert {
+        /// The user info
+        #[clap(flatten)]
+        user: User,
+        /// Return plain secret code or as QR code
+        #[clap(long, short)]
+        qr_code: bool,
+    },
     /// Update user info & secret except the username
     Update {
         /// The unique user name
@@ -478,7 +489,7 @@ impl DbManager {
         Ok(())
     }
 
-    pub async fn insert_user(&self, user: User) -> Result<String> {
+    pub async fn insert_user(&self, user: User, secret_as_qr_code: bool) -> Result<String> {
         println!("[db] inserting username: {} ...", user.username);
 
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(format!(
@@ -512,8 +523,13 @@ impl DbManager {
 
         let secret = rec.try_get::<String, _>(0)?;
 
-        println!("[db] username: {} added ", user.username);
-        Ok(secret)
+        println!("[db] username: {} added ", &user.username);
+
+        if secret_as_qr_code {
+            Ok(self.otpist.secret_to_qr_code(&user.username, &secret))
+        } else {
+            Ok(convert_to_base32(&secret))
+        }
     }
 
     pub async fn update_user(&self, username: &str, userupd: UserUpdate) -> Result<()> {
@@ -673,8 +689,8 @@ pub async fn db_tool(dbopt: DbOpt) -> Result<()> {
     match dbopt.action {
         DbCommand::Init(initopts) => db.init(initopts).await,
         DbCommand::Connect(_) => Ok(()),
-        DbCommand::Insert(user) => {
-            let secret = db.insert_user(user).await?;
+        DbCommand::Insert { user, qr_code } => {
+            let secret = db.insert_user(user, qr_code).await?;
             println!("[db] user inserted with secret: {}", secret);
             Ok(())
         }

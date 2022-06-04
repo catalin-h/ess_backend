@@ -94,8 +94,11 @@ async fn endpoint_api_admin_employee_post(mut req: Request<WsState>) -> tide::Re
         .body_json()
         .await
         .map_err(|e| tide::Error::new(StatusCode::BadRequest, e.into_inner()))?; // 400
-
-    match req.state().db.insert_user(user_data).await {
+    let return_qr_code = match req.header("EssSendQRCodeLink") {
+        Some(value) if value.as_str().eq_ignore_ascii_case("yes") => true,
+        _ => false,
+    };
+    match req.state().db.insert_user(user_data, return_qr_code).await {
         Ok(secret) => match mime::Mime::from_str("text/html;charset=utf-8") {
             Ok(m) => Ok(Response::builder(StatusCode::Ok)
                 .body(secret)

@@ -1,5 +1,5 @@
 use crate::ess_errors::Result;
-use google_authenticator::GoogleAuthenticator;
+use google_authenticator::{ErrorCorrectionLevel, GoogleAuthenticator};
 use rand::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,6 +18,14 @@ pub struct Otpist {
 impl Clone for Otpist {
     fn clone(&self) -> Self {
         Self::new_with(self.code_len, self.code_expire_sec, self.discrepancy)
+    }
+}
+
+pub fn convert_to_base32(text: &str) -> String {
+    if is_base32(text) {
+        text.to_string()
+    } else {
+        to_base32(text)
     }
 }
 
@@ -91,5 +99,13 @@ impl Otpist {
             self.gauth
                 .verify_code(&secret_b32, code, self.discrepancy, timeslice)
         }
+    }
+
+    pub fn secret_to_qr_code(&self, username: &str, secret: &str) -> String {
+        let welcome = format!("Authenticate as '{}' to ESS", username);
+        let secret = convert_to_base32(secret);
+
+        self.gauth
+            .qr_code_url(&secret, "ESS", &welcome, 0, 0, ErrorCorrectionLevel::Medium)
     }
 }
