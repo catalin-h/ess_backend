@@ -29,7 +29,7 @@ Note:
 * the ess service handles SIGINT, SIGTERM and SIGUP signals in order to gracefully shutdown from Docker
 * the postgres service details like user or database name can be configured via `.env` file
 
-### Getting the admin/pam client service root CA certificates
+### Getting the admin/pam client service root CA and client certificates
 Assuming the ess image was generated or is running under the name _ess_backend-ess_backend_ws-1_ must run the following Docker command(s) for copying the root CA files:
 For admin client:
 ```
@@ -40,8 +40,7 @@ For pam client:
 docker cp ess_backend-ess_backend_ws-1:/opt/ess_backend/certs/pam/pam-root-ca.crt ./
 ```
 Note:
-* since we only need to authenticate the server from web service client we only need the self-signed root ca certificate file.
-Mutual authentication is not a requirement right now.
+* The web service client needs to be authenticated by the server so must copy 3 files: the root CA, signed client certificate and the client key. To download all from a running `ess service` container one can use the script file `download_all_client_certs_from_container.sh <container name>`
 * The server certificate is bounded to the following host names and IPs:
 ```
 *.ess.local                                                                                                                                                                                              *.ess.net                                                                                                                                                                                                *.ess.local                                                                                                                                                                                              127.0.0.1           
