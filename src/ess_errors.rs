@@ -20,7 +20,9 @@ quick_error! {
         }
         File(filename: String, err: std::io::Error) {
             display("File I/O error: {} for filename: {}", err, filename)
-            context(path: &'a str, err: std::io::Error)
+            context(path: String, err: std::io::Error)
+                -> (path, err)
+            context(path: &str, err: std::io::Error)
                 -> (path.to_string(), err)
         }
         Timeout(err: async_std::future::TimeoutError) {
@@ -84,8 +86,8 @@ quick_error! {
             display("Signals trap error: {}", err)
             from()
         }
-        TlsCert(item: String) {
-            display("Invalid: {}", item)
+        TlsCert(cert: String) {
+            display("Invalid cert: {}", cert)
         }
         WebPki(err: tide_rustls::async_rustls::webpki::Error) {
             display("Web PKI error: {}", err)

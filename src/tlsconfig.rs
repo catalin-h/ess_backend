@@ -1,4 +1,5 @@
 use crate::ess_errors::{EssError, Result};
+use crate::quick_error::ResultExt;
 
 use std::env;
 use std::fs::File;
@@ -50,21 +51,21 @@ impl CertType {
 }
 
 fn load_certs(filename: &str) -> Result<Vec<Certificate>> {
-    let certfile = File::open(filename)?;
+    let certfile = File::open(filename).context(filename)?;
     let mut reader = BufReader::new(certfile);
     Ok(rustls_pemfile::certs(&mut reader)
-        .unwrap()
+        .context(filename)?
         .iter()
         .map(|v| Certificate(v.clone()))
         .collect())
 }
 
 fn load_private_key(filename: &str) -> Result<PrivateKey> {
-    let keyfile = File::open(filename)?;
+    let keyfile = File::open(filename).context(filename)?;
     let mut reader = BufReader::new(keyfile);
 
     loop {
-        match rustls_pemfile::read_one(&mut reader)? {
+        match rustls_pemfile::read_one(&mut reader).context(filename)? {
             Some(rustls_pemfile::Item::RSAKey(key)) => return Ok(PrivateKey(key)),
             Some(rustls_pemfile::Item::PKCS8Key(key)) => return Ok(PrivateKey(key)),
             Some(rustls_pemfile::Item::ECKey(key)) => return Ok(PrivateKey(key)),
@@ -73,7 +74,7 @@ fn load_private_key(filename: &str) -> Result<PrivateKey> {
         }
     }
 
-    Err(EssError::TlsCert(String::from(filename)))
+    Err(EssError::TlsCert(filename.to_string()))
 }
 
 fn get_root_store(file: &str) -> Result<RootCertStore> {
