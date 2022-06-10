@@ -160,6 +160,7 @@ pub async fn launch_ess_ws(admin: bool) -> Result<()> {
             .put(endpoint_api_admin_employee_put); // modifies an existing employee
         app.at("/api/admin/employee/*")
             .delete(endpoint_api_admin_employee_delete); // deletes an employee
+        app.at("/api/pam/verify").post(endpoint_api_pam_verify); // checks an username + otp
 
         let host = format!(
             "0.0.0.0:{}",

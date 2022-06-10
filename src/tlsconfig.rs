@@ -62,7 +62,7 @@ fn load_certs(filename: &str) -> Result<Vec<Certificate>> {
 }
 
 fn load_private_key(filename: &str) -> Result<PrivateKey> {
-	println!("loading private key file: {} ..", filename);
+    println!("loading private key file: {} ..", filename);
 
     let keyfile = File::open(filename).context(filename)?;
     let mut reader = BufReader::new(keyfile);
