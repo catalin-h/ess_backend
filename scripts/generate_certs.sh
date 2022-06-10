@@ -143,6 +143,10 @@ echo "echo 'Testing the TLS connection with certs ..'" >> $test_local
 echo "openssl s_server -accept 8443 -CAfile $(basename $root_ca_crt) \\
 -cert $(basename $server_crt) -key $(basename $server_key) -quiet -naccept 1 &" >> $test_local
 echo "sleep 5s" >> $test_local
+
+# if the server address is 127.0.0.1 openssl will issue a warning about
+# can't get_server_name. localhost doesn't work either but adding a
+# alias for localhost IP in /etc/hosts works
 echo "openssl s_client -connect 127.0.0.1:8443 -CAfile $(basename $root_ca_crt) \\
 -cert $(basename $client_crt) -key $(basename $client_key) -quiet" >> $test_local
 echo "echo 'Done'" >> $test_local

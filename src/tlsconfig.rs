@@ -51,6 +51,7 @@ impl CertType {
 }
 
 fn load_certs(filename: &str) -> Result<Vec<Certificate>> {
+    println!("loading cert file: {} ..", filename);
     let certfile = File::open(filename).context(filename)?;
     let mut reader = BufReader::new(certfile);
     Ok(rustls_pemfile::certs(&mut reader)
@@ -61,6 +62,8 @@ fn load_certs(filename: &str) -> Result<Vec<Certificate>> {
 }
 
 fn load_private_key(filename: &str) -> Result<PrivateKey> {
+	println!("loading private key file: {} ..", filename);
+
     let keyfile = File::open(filename).context(filename)?;
     let mut reader = BufReader::new(keyfile);
 
@@ -78,6 +81,8 @@ fn load_private_key(filename: &str) -> Result<PrivateKey> {
 }
 
 fn get_root_store(file: &str) -> Result<RootCertStore> {
+    println!("loading root ca file: {} ..", file);
+
     let mut roots = RootCertStore::empty();
 
     for root in load_certs(file)? {

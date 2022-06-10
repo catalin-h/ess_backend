@@ -55,9 +55,14 @@ basicConstraints=CA:FALSE
 subjectAltName=@my_subject_alt_names
 subjectKeyIdentifier = hash
 
+# This is a multi valued extension which indicates whether
+# a certificate is a CA certificate. The first (mandatory)
+# name is CA followed by TRUE or FALSE. If CA is TRUE then
+# an optional pathlen name followed by an non-negative value can be included.
+# https://www.openssl.org/docs/man1.0.2/man5/x509v3_config.html
 [ my_server_extensions ]
 keyUsage=critical, digitalSignature, keyEncipherment, keyCertSign
-basicConstraints=critical,CA:TRUE
+basicConstraints=critical,CA:FALSE
 extendedKeyUsage=critical,serverAuth
 subjectKeyIdentifier = hash
 subjectAltName=@my_subject_alt_names
