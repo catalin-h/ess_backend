@@ -562,12 +562,36 @@ impl DbManager {
             .push_bind(username)
             .push(" RETURNING username;");
 
-        let rec = qb.build().fetch_one(&self.pool).await?;
+        self.execute_user_action(username, qb, "update").await
+    }
 
-        let uname = rec.try_get::<String, _>(0)?;
+    pub async fn execute_user_action(
+        &self,
+        username: &str,
+        mut qb: sqlx::QueryBuilder<'_, sqlx::Postgres>,
+        action: &str,
+    ) -> Result<()> {
+        let rec = qb.build().fetch_optional(&self.pool).await?;
 
-        println!("[db] username: {} updated ", uname);
-        Ok(())
+        match rec {
+            Some(pg_row) => match pg_row.try_get::<String, _>(0) {
+                Ok(user_name) => {
+                    println!("[db] username: {} {}d", user_name, action);
+                    Ok(())
+                }
+                Err(e) => {
+                    println!(
+                        "[db] failed to {} username {}, error: {} ",
+                        action, username, e
+                    );
+                    Err(EssError::Sqlx(e))
+                }
+            },
+            None => {
+                println!("[db] username: {} not found", username);
+                Err(EssError::DbUserNotFound(String::from(username)))
+            }
+        }
     }
 
     pub async fn delete_user(&self, username: &str) -> Result<()> {
@@ -580,11 +604,7 @@ impl DbManager {
             .push_bind(username)
             .push(" RETURNING username;");
 
-        let rec = qb.build().fetch_one(&self.pool).await?;
-        let uname = rec.try_get::<String, _>(0)?;
-
-        println!("[db] username: {} deleted ", uname);
-        Ok(())
+        self.execute_user_action(username, qb, "delete").await
     }
 
     pub fn with_otpist(&mut self, otpist: Otpist) {
